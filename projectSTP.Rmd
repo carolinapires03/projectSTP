@@ -1,0 +1,243 @@
+---
+title: ' Time Series and Forecasting Project'
+author: "Bárbara Galiza 202408654; 
+        Carolina Pires 202408704;
+        Mariia Zhokhova 202408799"
+        
+subtitle: 'Analyse time series data'
+output: html_notebook
+institute: Faculdade de Ciências, Universidade do Porto
+---
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(ggcorrplot)
+library(scales)
+```
+
+# Exploratory Data Analysis
+
+```{r}
+dataset <- read.csv("amazon.csv")
+```
+
+```{r}
+head(dataset)
+```
+
+```{r}
+summary(dataset)
+```
+
+
+```{r}
+colSums(is.na(dataset))
+```
+
+```{r}
+duplicados <- dataset[duplicated(dataset), ]
+cat("Number of duplicate rows: ", nrow(duplicados), "\n")
+```
+
+```{r}
+dataset_sem_duplicados <- dataset %>% distinct()
+```
+
+```{r}
+cat("Número total de linhas após remover duplicados: ", nrow(dataset_sem_duplicados), "\n")
+```
+
+```{r}
+dataset <- dataset_sem_duplicados
+```
+
+```{r}
+dataset <- dataset %>%
+  mutate(year = as.integer(year))
+```
+
+Aggregate data by year
+
+```{r}
+annual_data <- dataset %>%
+  group_by(year) %>%
+  summarise(total_fires = sum(number, na.rm = TRUE))
+```
+
+```{r}
+head(annual_data)
+```
+
+```{r}
+summary(annual_data$total_fires)
+```
+
+```{r}
+ggplot(annual_data, aes(x = year, y = total_fires)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Annual Number of Forest Fires in Brazil",
+       x = "year", y = "Number of fires") +
+  theme_minimal()
+```
+
+```{r}
+estados_unicos <- unique(dataset$state)
+
+cat("Estados presentes no dataset:\n")
+print(estados_unicos)
+```
+```{r}
+cat("Número total de estados únicos:", length(estados_unicos), "\n")
+
+frequencia_estados <- dataset %>%
+  count(state) %>%
+  arrange(desc(n))
+
+cat("Frequência de ocorrências por estado:\n")
+print(frequencia_estados)
+```
+```{r}
+incendios_por_estado <- dataset %>%
+  group_by(state) %>%
+  summarise(total_incendios = sum(number, na.rm = TRUE)) %>%
+  arrange(desc(total_incendios))
+
+cat("Número total de incêndios por estado:\n")
+print(incendios_por_estado)
+```
+```{r}
+ggplot(incendios_por_estado, aes(x = reorder(state, -total_incendios), y = total_incendios)) +
+  geom_bar(stat = "identity", fill = "skyblue") +
+  labs(title = "Total number of fires per state",
+       x = "States", y = "Number of fires") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+
+```{r}
+fires_ts <- ts(annual_data$total_fires, start = min(annual_data$year), frequency = 1)
+```
+
+```{r}
+plot(fires_ts, main = "Time Series of Forest Fires in Brazil",
+     xlab = "Year", ylab = "Number of fires", col = "blue", lwd = 2)
+```
+## State chosen: Amazonas
+
+```{r}
+amazonas_data <- dataset %>%
+  filter(state == "Amazonas") %>%
+  mutate(
+    month = case_when(
+      month == "Janeiro" ~ 1,
+      month == "Fevereiro" ~ 2,
+      month == "Março" ~ 3,
+      month == "Abril" ~ 4,
+      month == "Maio" ~ 5,
+      month == "Junho" ~ 6,
+      month == "Julho" ~ 7,
+      month == "Agosto" ~ 8,
+      month == "Setembro" ~ 9,
+      month == "Outubro" ~ 10,
+      month == "Novembro" ~ 11,
+      month == "Dezembro" ~ 12
+    )
+  ) %>%
+  arrange(year, month)
+```
+
+
+```{r}
+head(amazonas_data)
+```
+
+```{r}
+ts_amazonas <- ts(amazonas_data$number, 
+                    start = c(min(amazonas_data$year), 1), 
+                    frequency = 12)
+```
+
+
+```{r}
+plot(ts_amazonas, main = "Série Temporal de Incêndios - Amazonas",
+     xlab = "Ano", ylab = "Número de Incêndios", col = "blue", lwd = 2)
+```
+
+Autocorrelation analysis
+
+```{r}
+acf(ts_amazonas, main = "Autocorrelation Function (ACF) - Amazonas")
+pacf(ts_amazonas, main = "Partial Autocorrelation Function (PACF) - Amazonas")
+```
+
+```{r}
+adf_test <- adf.test(ts_amazonas, alternative = "stationary")
+cat("ADF Test p-value: ", adf_test$p.value, "\n")
+if (adf_test$p.value < 0.05) {
+  cat("The series is stationary based on the ADF test.\n")
+} else {
+  cat("The series is not stationary based on the ADF test.\n")
+}
+```
+
+```{r}
+amazonas_agg <- amazonas_data %>%
+  group_by(year) %>%
+  summarise(total_fires = sum(number, na.rm = TRUE))
+```
+
+```{r}
+ggplot(amazonas_agg, aes(x = year, y = total_fires)) +
+  geom_line(color = "blue", size = 1) +
+  geom_point(color = "red", size = 2) +
+  labs(title = "Annual Evolution of Forest Fires - Amazonas",
+       x = "Year", y = "Number of fires") +
+  theme_minimal()
+```
+
+```{r}
+trend_model <- lm(total_fires ~ year, data = amazonas_agg)
+summary(trend_model)
+```
+
+```{r}
+ggplot(amazonas_agg, aes(x = year, y = total_fires)) +
+  geom_line(color = "blue", size = 1) +
+  geom_smooth(method = "lm", color = "red", se = FALSE, linetype = "dashed") +
+  labs(title = "Number of Fires with Trend Line - Amazonas",
+       x = "Year", y = "Number of fires") +
+  theme_minimal()
+```
+
+
+```{r}
+mato_grosso_data <- mato_grosso_data %>%
+  mutate(change = c(NA, diff(total_fires))) 
+
+ggplot(mato_grosso_data, aes(x = year, y = change)) +
+  geom_line(color = "purple", size = 1) +
+  labs(title = "Annual Variation in the Number of Fires",
+       x = "Year", y = "Change in the Number of Fires") +
+  theme_minimal()
+```
+```{r}
+autoplot(ts_amazonas, facets=TRUE)
+```
+
+Dividing the data into training and test
+
+```{r}
+train <- window(ts_amazonas, end = c(2015, 12))
+test <- window(ts_amazonas, start = c(2016, 1))
+```
+
+```{r}
+plot(train, main = "Training Set - Amazonas", ylab = "Número de Incêndios", col = "darkgreen", lwd = 2)
+plot(test, main = "Training Set - Amazonas", ylab = "Número de Incêndios", col = "orange", lwd = 2)
+```
+Modelo ARIMA
