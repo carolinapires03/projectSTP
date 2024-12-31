@@ -304,12 +304,7 @@ ggplot(moving_avg, aes(x = as.Date(paste(year, month, 1, sep = "-")), y = moving
   labs(title = "12-Month Moving Average", x = "Date", y = "Moving Average of Fires") +
   theme_minimal()
 ```
-```{r}
-ggplot(dataset, aes(x = year, y = fires, color = state)) +
-  geom_line() +
-  labs(title = "Comparison of Fires Across States", x = "Year", y = "Number of Fires") +
-  theme_minimal()
-```
+
 
 ```{r}
 # 4. Regression with Trend and Seasonality
