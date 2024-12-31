@@ -22,7 +22,7 @@ library(scales)
 # Exploratory Data Analysis
 
 ```{r}
-dataset <- read.csv("amazon.csv")
+dataset <- read.csv("amazon_with_date.csv")
 ```
 
 ```{r}
@@ -60,12 +60,16 @@ dataset <- dataset %>%
   mutate(year = as.integer(year))
 ```
 
-Aggregate data by year
+```{r}
+str(dataset) 
+```
+
+#### Aggregate data by year
 
 ```{r}
 annual_data <- dataset %>%
   group_by(year) %>%
-  summarise(total_fires = sum(number, na.rm = TRUE))
+  summarise(total_fires = sum(fires, na.rm = TRUE))
 ```
 
 ```{r}
@@ -91,22 +95,22 @@ cat("Estados presentes no dataset:\n")
 print(estados_unicos)
 ```
 ```{r}
-cat("Número total de estados únicos:", length(estados_unicos), "\n")
+cat("Total number of unique states:", length(estados_unicos), "\n")
 
 frequencia_estados <- dataset %>%
   count(state) %>%
   arrange(desc(n))
 
-cat("Frequência de ocorrências por estado:\n")
+cat("Frequency of occurrences by state:\n")
 print(frequencia_estados)
 ```
 ```{r}
 incendios_por_estado <- dataset %>%
   group_by(state) %>%
-  summarise(total_incendios = sum(number, na.rm = TRUE)) %>%
+  summarise(total_incendios = sum(fires, na.rm = TRUE)) %>%
   arrange(desc(total_incendios))
 
-cat("Número total de incêndios por estado:\n")
+cat("Total number of fires per state:\n")
 print(incendios_por_estado)
 ```
 ```{r}
@@ -127,117 +131,284 @@ fires_ts <- ts(annual_data$total_fires, start = min(annual_data$year), frequency
 plot(fires_ts, main = "Time Series of Forest Fires in Brazil",
      xlab = "Year", ylab = "Number of fires", col = "blue", lwd = 2)
 ```
-## State chosen: Amazonas
+## State chosen: Mato Grosso
 
 ```{r}
-amazonas_data <- dataset %>%
-  filter(state == "Amazonas") %>%
-  mutate(
-    month = case_when(
-      month == "Janeiro" ~ 1,
-      month == "Fevereiro" ~ 2,
-      month == "Março" ~ 3,
-      month == "Abril" ~ 4,
-      month == "Maio" ~ 5,
-      month == "Junho" ~ 6,
-      month == "Julho" ~ 7,
-      month == "Agosto" ~ 8,
-      month == "Setembro" ~ 9,
-      month == "Outubro" ~ 10,
-      month == "Novembro" ~ 11,
-      month == "Dezembro" ~ 12
-    )
-  ) %>%
+mato_grosso_data <- dataset %>%
+  filter(state == "MATO GROSSO DO SUL") %>%
   arrange(year, month)
 ```
 
-
 ```{r}
-head(amazonas_data)
+head(mato_grosso_data)
 ```
 
 ```{r}
-ts_amazonas <- ts(amazonas_data$number, 
-                    start = c(min(amazonas_data$year), 1), 
-                    frequency = 12)
+ts_mato_grosso <- ts(mato_grosso_data$fires, 
+                     start = c(min(mato_grosso_data$year), min(mato_grosso_data$month)), 
+                     frequency = 12)
 ```
 
 
 ```{r}
-plot(ts_amazonas, main = "Série Temporal de Incêndios - Amazonas",
-     xlab = "Ano", ylab = "Número de Incêndios", col = "blue", lwd = 2)
+plot(ts_mato_grosso, main = "Fire Time Series - Mato Grosso",
+     xlab = "Year", ylab = "Number of fires", col = "blue", lwd = 2)
 ```
-
-Autocorrelation analysis
+#### Aggregate data annually
 
 ```{r}
-acf(ts_amazonas, main = "Autocorrelation Function (ACF) - Amazonas")
-pacf(ts_amazonas, main = "Partial Autocorrelation Function (PACF) - Amazonas")
+annual_mato_grosso <- mato_grosso_data %>%
+  group_by(year) %>%
+  summarise(total_fires = sum(fires, na.rm = TRUE))
 ```
 
 ```{r}
-adf_test <- adf.test(ts_amazonas, alternative = "stationary")
-cat("ADF Test p-value: ", adf_test$p.value, "\n")
-if (adf_test$p.value < 0.05) {
-  cat("The series is stationary based on the ADF test.\n")
+print(annual_mato_grosso)
+```
+
+```{r}
+ts_mato_grosso_annual <- ts(annual_mato_grosso$total_fires, 
+                            start = min(annual_mato_grosso$year), 
+                            frequency = 1)
+```
+
+```{r}
+plot(ts_mato_grosso_annual, main = "Annual Time Series of Fires - Mato Grosso",
+     xlab = "Ano", ylab = "Number of fires", col = "darkblue", lwd = 2)
+```
+
+### Autocorrelation analysis
+
+- Monthly data
+```{r}
+acf(ts_mato_grosso, main = "Autocorrelation Function (ACF)")
+pacf(ts_mato_grosso, main = "Partial Autocorrelation Function (PACF)")
+```
+
+```{r}
+adf_test_monthly <- adf.test(ts_mato_grosso, alternative = "stationary")
+cat("ADF Test - p-value:", adf_test_monthly$p.value, "\n")
+if (adf_test_monthly$p.value < 0.05) {
+  cat("The monthly series is stationary based on the ADF test.\n")
 } else {
-  cat("The series is not stationary based on the ADF test.\n")
+  cat("The monthly series is not stationary based on the ADF test.\n")
 }
 ```
 
+
+- annual data
+
 ```{r}
-amazonas_agg <- amazonas_data %>%
+acf(ts_mato_grosso_annual, main = "Autocorrelation Function (ACF)")
+pacf(ts_mato_grosso_annual, main = "Partial Autocorrelation Function (PACF)")
+
+```
+```{r}
+adf_test_annual <- adf.test(ts_mato_grosso_annual, alternative = "stationary")
+cat("ADF Test (Anual) - p-value:", adf_test_annual$p.value, "\n")
+if (adf_test_annual$p.value < 0.05) {
+  cat("The annual series is stationary based on the ADF test.\n")
+} else {
+  cat("The annual series is not stationary based on the ADF test.\n")
+}
+```
+
+
+```{r}
+mato_grosso_agg <- mato_grosso_data %>%
   group_by(year) %>%
-  summarise(total_fires = sum(number, na.rm = TRUE))
+  summarise(total_fires = sum(fires, na.rm = TRUE))
 ```
 
 ```{r}
-ggplot(amazonas_agg, aes(x = year, y = total_fires)) +
+ggplot(mato_grosso_agg, aes(x = year, y = total_fires)) +
   geom_line(color = "blue", size = 1) +
   geom_point(color = "red", size = 2) +
-  labs(title = "Annual Evolution of Forest Fires - Amazonas",
-       x = "Year", y = "Number of fires") +
-  theme_minimal()
-```
-
-```{r}
-trend_model <- lm(total_fires ~ year, data = amazonas_agg)
-summary(trend_model)
-```
-
-```{r}
-ggplot(amazonas_agg, aes(x = year, y = total_fires)) +
-  geom_line(color = "blue", size = 1) +
-  geom_smooth(method = "lm", color = "red", se = FALSE, linetype = "dashed") +
-  labs(title = "Number of Fires with Trend Line - Amazonas",
-       x = "Year", y = "Number of fires") +
+  labs(title = "Annual Evolution of Forest Fires - Mato Grosso",
+       x = "Year", y = "Number of Fires") +
   theme_minimal()
 ```
 
 
+
 ```{r}
-mato_grosso_data <- mato_grosso_data %>%
+mato_grosso_agg <- mato_grosso_agg %>%
   mutate(change = c(NA, diff(total_fires))) 
 
-ggplot(mato_grosso_data, aes(x = year, y = change)) +
+ggplot(mato_grosso_agg, aes(x = year, y = change)) +
   geom_line(color = "purple", size = 1) +
-  labs(title = "Annual Variation in the Number of Fires",
+  labs(title = "Annual Variation in the Number of Fires - Mato Grosso",
        x = "Year", y = "Change in the Number of Fires") +
   theme_minimal()
 ```
-```{r}
-autoplot(ts_amazonas, facets=TRUE)
-```
 
-Dividing the data into training and test
 
 ```{r}
-train <- window(ts_amazonas, end = c(2015, 12))
-test <- window(ts_amazonas, start = c(2016, 1))
+decomp_mato_grosso <- decompose(ts_mato_grosso, type = "multiplicative")
+
+plot(decomp_mato_grosso)
 ```
 
 ```{r}
-plot(train, main = "Training Set - Amazonas", ylab = "Número de Incêndios", col = "darkgreen", lwd = 2)
-plot(test, main = "Training Set - Amazonas", ylab = "Número de Incêndios", col = "orange", lwd = 2)
+trend_model <- lm(total_fires ~ year, data = annual_mato_grosso)
+
+summary(trend_model)
+
+annual_mato_grosso <- annual_mato_grosso %>%
+  mutate(
+    trend = predict(trend_model),       
+    residuals = total_fires - trend     
+  )
+
+library(ggplot2)
+ggplot(annual_mato_grosso, aes(x = year)) +
+  geom_line(aes(y = total_fires, color = "Observed"), size = 1) +
+  geom_line(aes(y = trend, color = "Trend"), linetype = "dashed", size = 1) +
+  labs(title = "Observed vs Trend - Annual Fires in Mato Grosso",
+       x = "Year", y = "Number of Fires") +
+  scale_color_manual(name = "Legend", values = c("Observed" = "blue", "Trend" = "red")) +
+  theme_minimal()
+
+ggplot(annual_mato_grosso, aes(x = year, y = residuals)) +
+  geom_line(color = "purple", size = 1) +
+  labs(title = "Residuals of Annual Fires - Mato Grosso",
+       x = "Year", y = "Residuals") +
+  theme_minimal()
 ```
-Modelo ARIMA
+### seasonality 
+
+
+```{r}
+ggplot(mato_grosso_data, aes(x = as.factor(month), y = fires)) +
+  geom_boxplot() +
+  labs(title = "Monthly Seasonality - Mato Grosso", x = "Month", y = "Number of Fires") +
+  theme_minimal()
+```
+```{r}
+monthplot(ts_mato_grosso)
+```
+```{r}
+seasonplot(ts_mato_grosso)
+
+```
+
+### Seasonal Moving Averages
+
+```{r}
+moving_avg <- mato_grosso_data %>%
+  arrange(year, month) %>%
+  mutate(moving_avg = zoo::rollmean(fires, k = 12, fill = NA))
+
+ggplot(moving_avg, aes(x = as.Date(paste(year, month, 1, sep = "-")), y = moving_avg)) +
+  geom_line(color = "blue") +
+  labs(title = "12-Month Moving Average", x = "Date", y = "Moving Average of Fires") +
+  theme_minimal()
+```
+```{r}
+ggplot(dataset, aes(x = year, y = fires, color = state)) +
+  geom_line() +
+  labs(title = "Comparison of Fires Across States", x = "Year", y = "Number of Fires") +
+  theme_minimal()
+```
+
+```{r}
+# 4. Regression with Trend and Seasonality
+dummies_model <- tslm(ts_mato_grosso ~ trend + season)
+summary(dummies_model)
+
+autoplot(ts_mato_grosso, series="Data") +
+  autolayer(fitted(dummies_model), series="Fitted") +
+  xlab("Year") + ylab("Number of Fires") +
+  ggtitle("Fitted Trend and Seasonality - Mato Grosso")
+
+plot(residuals(dummies_model), main = "Detrended Desasonalized Data - Mato Grosso", type="l", col="blue")
+```
+```{r}
+# 5. Fourier Series for Seasonality
+fourier_model <- tslm(ts_mato_grosso ~ trend + fourier(ts_mato_grosso, K=2))
+summary(fourier_model)
+
+autoplot(ts_mato_grosso, series="Data") +
+  autolayer(fitted(fourier_model), series="Fitted") +
+  xlab("Year") + ylab("Number of Fires") +
+  ggtitle("Fitted Fourier Model - Mato Grosso")
+
+plot(residuals(fourier_model), main = "Detrended Desasonalized Data - Fourier - Mato Grosso", type="l", col="blue")
+seasonplot(residuals(fourier_model))
+```
+```{r}
+# Seasonal Differencing
+par(mfrow=c(2,1))
+plot(ts_mato_grosso, main="Original Series", type="l", col="blue")
+plot(diff(ts_mato_grosso, 12), main="Seasonally Differenced Series", type="l", col="red")
+monthplot(diff(ts_mato_grosso, 12))
+```
+```{r}
+library(scales)
+```
+
+```{r}
+# Removing Both Trend and Seasonality
+par(mfrow=c(2,1))
+plot(ts_mato_grosso, main="Original Series", type="l", col="blue")
+plot(diff(diff(ts_mato_grosso), 12), main="Trend and Seasonally Differenced Series", type="l", col="red")
+acf(diff(diff(ts_mato_grosso), 12), main="ACF of Trend and Seasonally Differenced Series")
+```
+
+```{r}
+# 8. STL Decomposition
+mato_grosso_stl_per <- stl(ts_mato_grosso, s.window="periodic")
+mato_grosso_stl <- stl(ts_mato_grosso, s.window=13)
+plot(mato_grosso_stl_per)
+plot(mato_grosso_stl)
+```
+
+```{r}
+# Extracting Time Series Components
+head(mato_grosso_stl_per$time.series, 24)
+head(mato_grosso_stl$time.series, 24)
+```
+
+```{r}
+# Applying STL to Mato Grosso Data
+plot(mato_grosso_stl)
+```
+
+```{r}
+# Correlation Behavior in Remainder
+acf(ts_mato_grosso, main="ACF of Original Series")
+acf(mato_grosso_stl$time.series[,3], main="ACF of Remainder")
+```
+
+### Dividing the data into training and test
+
+```{r}
+train_mato_grosso <- window(ts_mato_grosso, end = c(2015, 12)) 
+test_mato_grosso <- window(ts_mato_grosso, start = c(2016, 1))
+```
+
+```{r}
+plot(train_mato_grosso, 
+     main = "Training Set - Mato Grosso", 
+     ylab = "Number of fires", 
+     xlab = "Year", 
+     col = "darkgreen", 
+     lwd = 2)
+
+plot(test_mato_grosso, 
+     main = "Test Set - Mato Grosso", 
+     ylab = "Number of fires", 
+     xlab = "Year", 
+     col = "orange", 
+     lwd = 2)
+```
+
+### Modelo ARIMA
+```{r}
+arima_model <- auto.arima(ts_mato_grosso)
+summary(arima_model)
+
+forecast_arima <- forecast(arima_model, h = 12)
+plot(forecast_arima)
+```
+
