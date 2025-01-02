@@ -400,10 +400,150 @@ plot(test_mato_grosso,
 
 ### Modelo ARIMA
 ```{r}
-arima_model <- auto.arima(ts_mato_grosso)
-summary(arima_model)
+#arima_model <- auto.arima(ts_mato_grosso)
+#summary(arima_model)
 
-forecast_arima <- forecast(arima_model, h = 12)
-plot(forecast_arima)
+#forecast_arima <- forecast(arima_model, h = 12)
+#plot(forecast_arima)
 ```
+
+Apply logarithm because of hetecedasticity:
+```{r}
+library(forecast)
+shift_value <- 1 - min(train_mato_grosso)
+train_mato_grosso_shifted <- train_mato_grosso + shift_value
+
+ly = log(train_mato_grosso_shifted)
+plot(ly, 
+     main = "Training Set (logged) - Mato Grosso", 
+     ylab = "Number of fires", 
+     xlab = "Year", 
+     col = "darkgreen", 
+     lwd = 2)
+
+# Calculate the optimal lambda for Box-Cox transformation
+lambda <- BoxCox.lambda(train_mato_grosso_shifted)
+
+# Apply the Box-Cox transformation
+by <- BoxCox(train_mato_grosso_shifted, lambda)
+
+# Plot the transformed time series
+plot(
+  by,
+  main = "Training Set (BoxCox) - Mato Grosso",
+  ylab = "Number of Fires",
+  xlab = "Year",
+  col = "darkgreen",
+  lwd = 2
+)
+```
+ADF test
+```{r}
+adf_test_train <- adf.test(ly, alternative = "stationary")
+cat("ADF Test - p-value:", adf_test_train$p.value, "\n")
+if (adf_test_train$p.value < 0.05) {
+  cat("The monthly series is stationary based on the ADF test.\n")
+} else {
+  cat("The monthly series is not stationary based on the ADF test.\n")
+}
+
+kpss_test_train <- kpss.test(ly, null = "Level")
+cat("KPSS Test - p-value:", kpss_test_train$p.value, "\n")
+if (kpss_test_train$p.value < 0.05) {
+  cat("The monthly series is NOT stationary based on the KPSS test.\n")
+} else {
+  cat("The monthly series is stationary based on the KPSS test.\n")
+}
+```
+The tests indicate stationarity. Use ndiffs and nsdiffs:
+```{r}
+nsdiffs(ly)
+ndiffs(ly)
+```
+
+Series is not stationary, needs differiencing. d = 0, D = 1.
+```{r}
+dly1 = diff(ly,1)
+dly12 = diff(ly,12)
+dly12_1 = diff(diff(ly,12),1)
+```
+
+```{r}
+maxlag <- 48
+par(mfrow=c(3,4), mar=c(3,3,4,2))
+
+plot(ly, main = expression("log(y)"))
+plot(dly1, main = expression(paste(Delta, "log(y)")))
+plot(dly12, main = expression(paste(Delta[12], "log(y)")))
+plot(dly12_1, main = expression(paste(Delta, Delta[12], "log(y)")))
+
+Acf(ly, type='correlation', lag=maxlag, ylab="", main=expression(paste("ACF for log(y)")))
+Acf(dly1, type='correlation', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("ACF for ", Delta,"log(y)")))
+Acf(dly12, type='correlation', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("ACF for ", Delta[12], "log(y)")))
+Acf(dly12_1, type='correlation', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("ACF for ", Delta, Delta[12], "log(y)")))
+
+Acf(ly, type='partial', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("PACF for log(y)")))
+Acf(dly1, type='partial', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("PACF for ", Delta, "log(y)")))
+Acf(dly12, type='partial', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("PACF for ", Delta[12], "log(y)")))
+Acf(dly12_1, type='partial', lag=maxlag, na.action=na.omit, ylab="", main=expression(paste("PACF for ", Delta,Delta[12], "log(y)")))
+```
+
+Although the ndiffs and nsdiffs tests indicated d = 0 and D = 1, the ACF and PACF of D=1 and d=1 shows a more stationary series. So we will test for both d = 1 and d = 0. For the MA and AR components, for the d = 0 we propose q = 0, p = 1 or 2, P = 1, given the significant lag 12 at the PACF, and Q = 0. For d = 1, we propose q = 1, p = 0, Q = 1 (lag 12 on ACF) and P = 1. Also, s = 12.
+
+Models SARIMA(p,d,q)x(P,D,Q)s to try:
+SARIMA(1,0,0)x(1,1,0)12
+SARIMA(2,0,0)x(1,1,0)12
+SARIMA(0,1,1)x(1,1,1)12
+
+```{r}
+library(astsa)
+m1=sarima(ly,1,0,0,1,1,0,12)
+```
+The residuals from model 1 show autocorrelation
+```{r}
+m2=sarima(ly,2,0,0,1,1,0,12)
+```
+Seems like a good fit, with all the p-values from Ljung-Box being above 0.05, meaning the residuals are independent, and the ACF of residuals show they are mostly uncorrelated.
+```{r}
+m3=sarima(ly,0,1,1,1,1,1,12)
+```
+Not a good fit given the Ljung-Box statistic.
+
+M2 was the best fit. We must investigate if the parameters are significant:
+```{r}
+m2
+```
+Constant is not significant
+
+```{r}
+m21 = sarima(ly, 2, 0, 0, 1, 1, 0, 12, no.constant = TRUE)
+```
+```{r}
+m21
+```
+Now all the parameters are significant.
+```{r}
+acf2(m21$fit$residuals)
+```
+There is still some correlation left on the PACF, lets try variations of mod4.
+```{r}
+m22 = sarima(ly, p = 3, d = 0, q = 0, P = 1, D = 1, Q = 0, S = 12, no.constant = TRUE)
+acf2(m22$fit$residuals)
+```
+AR3 not significant. Lets try q = 1
+
+```{r}
+m23 = sarima(ly, p = 2, d = 0, q = 1, P = 1, D = 1, Q = 0, S = 12, no.constant = TRUE)
+acf2(m22$fit$residuals)
+```
+Still the same problem with PACF and non significant coefficients. Better to stick with model21.
+```{r}
+m21
+```
+Final model: SARIMA(2,0,0)x(1,1,0)12 with no constant (full formula on the report).
+
+The AIC of mod21 was lower than most models, just not lower than mod3. However, mod3 did not meet the residuals assumptions, so mod21 can be considered the model with lowest AIC (and BIC) out of the more adequate models, such as mod2, mod21, mod22 and mod23.
+
+
+
 
