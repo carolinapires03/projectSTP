@@ -528,7 +528,7 @@ AR3 not significant. Lets try q = 1
 
 ```{r}
 m23 = sarima(ly, p = 2, d = 0, q = 1, P = 1, D = 1, Q = 0, S = 12, no.constant = TRUE)
-acf2(m22$fit$residuals)
+acf2(m23$fit$residuals)
 ```
 Still the same problem with PACF and non significant coefficients. Better to stick with model21.
 ```{r}
@@ -538,12 +538,41 @@ Final model: SARIMA(2,0,0)x(1,1,0)12 with no constant (full formula on the repor
 
 The AIC of mod21 was lower than most models, just not lower than mod3. However, mod3 did not meet the residuals assumptions, so mod21 can be considered the model with lowest AIC (and BIC) out of the more adequate models, such as mod2, mod21, mod22 and mod23.
 
-### FORECASTING
-
+However, we still need to compare the models based on the quality of their forecasts.
 ```{r}
 library(forecast)
 ```
 
+```{r}
+m21_arima <- Arima(ly, order = c(2, 0, 0), seasonal=list(order=c(1,1,0), period=12), include.constant = FALSE)
+m22_arima <- Arima(ly, order = c(3, 0, 0), seasonal=list(order=c(1,1,0), period=12), include.constant = FALSE)
+m23_arima <- Arima(ly, order = c(2, 0, 1), seasonal=list(order=c(1,1,0), period=12), include.constant = FALSE)
+
+hmax <- 23
+m21.f.h <- forecast(m21_arima, h=hmax)
+m22.f.h <- forecast(m22_arima, h=hmax)
+m23.f.h <- forecast(m23_arima, h=hmax)
+```
+
+```{r}
+test_mato_grosso_shifted <- test_mato_grosso + shift_value
+log_test <- log(test_mato_grosso_shifted)
+
+m21.f.h.acc = accuracy(m21.f.h, log_test)
+m22.f.h.acc = accuracy(m22.f.h, log_test)
+m23.f.h.acc = accuracy(m23.f.h, log_test)
+m21.f.h.acc
+```
+```{r}
+m22.f.h.acc
+```
+```{r}
+m23.f.h.acc
+```
+The 3 models performed similarly on the training set, but m21 shows a clear advantage on the test set results in all the most relevant metrics (RMSE, MAE, MAPE, MASE).
+NOTE: These are logged values, so they work for comparing the models but not for interpreting the direct effect on number of fires.
+
+### FORECASTING
 
 Forecast the next 23 months via sarima.for method 
 NO CROSS-VALIDATION
