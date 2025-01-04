@@ -399,13 +399,7 @@ plot(test_mato_grosso,
 ```
 
 ### Modelo ARIMA
-```{r}
-#arima_model <- auto.arima(ts_mato_grosso)
-#summary(arima_model)
 
-#forecast_arima <- forecast(arima_model, h = 12)
-#plot(forecast_arima)
-```
 
 Apply logarithm because of hetecedasticity:
 ```{r}
@@ -544,14 +538,7 @@ Final model: SARIMA(2,0,0)x(1,1,0)12 with no constant (full formula on the repor
 
 The AIC of mod21 was lower than most models, just not lower than mod3. However, mod3 did not meet the residuals assumptions, so mod21 can be considered the model with lowest AIC (and BIC) out of the more adequate models, such as mod2, mod21, mod22 and mod23.
 
-
-
-
-
-
-
-
-FORECASTING
+### FORECASTING
 
 ```{r}
 library(forecast)
@@ -561,6 +548,7 @@ library(forecast)
 Forecast the next 23 months via sarima.for method 
 NO CROSS-VALIDATION
 ```{r}
+log_test_mato_grosso <- log(test_mato_grosso)
 forecast_m21 <- sarima.for(ly, n.ahead = length(log_test_mato_grosso), p = 2, d = 0, q = 0, P = 1, D = 1, Q = 0, S = 12, no.constant = TRUE)
 ```
 ```{r}
