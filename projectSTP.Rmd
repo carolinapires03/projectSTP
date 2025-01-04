@@ -547,3 +547,284 @@ The AIC of mod21 was lower than most models, just not lower than mod3. However, 
 
 
 
+
+
+
+
+FORECASTING
+
+```{r}
+library(forecast)
+```
+
+
+Forecast the next 23 months via sarima.for method 
+NO CROSS-VALIDATION
+```{r}
+forecast_m21 <- sarima.for(ly, n.ahead = length(log_test_mato_grosso), p = 2, d = 0, q = 0, P = 1, D = 1, Q = 0, S = 12, no.constant = TRUE)
+```
+```{r}
+#get data in the original shape (non-transformed)
+forecast_values <- exp(forecast_m21$pred) - shift_value
+test_values <- test_mato_grosso
+```
+
+95% prediction intervals
+```{r}
+#Lower and upper bounds for 95% intervals
+lowerB <- forecast_m21$pred - 1.96 * forecast_m21$se
+upperB <- forecast_m21$pred + 1.96 * forecast_m21$se
+
+#cat("The upper bounds for our forward pred are: ", upperB, "\n")
+#cat("The lower bounds for our forward pred are: ", lowerB, "\n")
+
+```
+
+```{r}
+#get bounds in a nn-transformed form
+lower_bound <- exp(lowerB) - shift_value
+upper_bound <- exp(upperB) - shift_value
+```
+
+
+Plotting forecasted and actual data
+```{r}
+library(ggplot2)
+
+#Create a comparison table
+comparison_table <- data.frame(
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Actual = test_values,
+  Forecasted = forecast_values,
+  Lower_95 = lower_bound,  # Lower bound of the 95% interval
+  Upper_95 = upper_bound,  # Upper bound of the 95% interval
+  Error = test_values - forecast_values,  # Error: Actual - Forecast
+  Absolute_Error = abs(test_values - forecast_values),  # Absolute Error
+  Percentage_Error = (abs(test_values - forecast_values) / test_values) * 100  # Percentage Error
+)
+comparison_table$Within_95_Interval <- with(comparison_table, Actual >= Lower_95 & Actual <= Upper_95)
+
+#Create a plot
+ggplot(comparison_table, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = Forecasted, color = "Forecast"), size = 1, linetype = "dashed") +
+  geom_ribbon(aes(ymin = Lower_95, ymax = Upper_95), fill = "lightblue", alpha = 0.5) +
+  labs(
+    title = "Actual vs Forecasted Values with 95% Prediction Intervals",
+    x = "Date",
+    y = "Number of fires"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())  
+
+```
+```{r}
+#Create a plot - without intervals
+ggplot(comparison_table, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = Forecasted, color = "Forecast"), size = 1, linetype = "dashed") +
+  labs(
+    title = "Actual vs Forecasted Values with 95% Prediction Intervals",
+    x = "Date",
+    y = "Number of fires"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())  
+
+```
+
+
+
+```{r}
+# Print the comparison table
+print(comparison_table)
+
+
+mae <- mean(comparison_table$Absolute_Error)
+rmse <- sqrt(mean(comparison_table$Error^2))
+mape <- mean(comparison_table$Percentage_Error)
+medae <- median(comparison_table$Error)
+ss_total <- sum((comparison_table$Actual - mean(comparison_table$Actual))^2)
+ss_residual <- sum((comparison_table$Actual - comparison_table$Forecasted)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+bias <- mean(comparison_table$Forecasted - comparison_table$Actual)
+
+# Creating a dataframe for evaluation statistics
+evaluation_df <- data.frame(
+  Metric = c("MAE", "RMSE", "MAPE", "MedAE", "R-Squared", "Bias"),
+  Value = c(mae, rmse, mape, medae, r_squared, bias)
+)
+
+print(evaluation_df)
+```
+
+
+Forecasting the last 23 months
+CROSS-VALIDATION 23 months with 1-step ahead
+
+
+```{r}
+#Applying log for original data
+shift_value <- 1 - min(ts_mato_grosso)
+ts_mato_grosso_shifted <- ts_mato_grosso + shift_value
+log_ts <- log(ts_mato_grosso_shifted)
+
+# Setting the size of the training and test set
+train_size <- length(log_ts) - length(test_mato_grosso)  
+
+# Storing the forecast errors, predictions, and intervals
+errors <- c()
+forecasted_values <- c()
+actual_values <- c()
+lower_bounds <- c()
+upper_bounds <- c()
+
+for (i in 1:length(test_mato_grosso)) {
+  # Defining training and test sets
+  train_set <- ts_mato_grosso_shifted[1:(train_size + i - 1)]
+  test_set <- ts_mato_grosso_shifted[(train_size + i):(train_size + i)]
+  
+  # Fitting the SARIMA model on the training set
+  fit <- Arima(train_set, order = c(2, 0, 0), seasonal = c(1, 1, 0), 
+                    include.constant = FALSE)
+  
+  # Forecasting the next value(s)
+  forecast_result <- forecast(fit, h = 1)
+  forecasted_value <- forecast_result$mean
+  forecasted_values <- c(forecasted_values, forecasted_value)
+  actual_values <- c(actual_values, test_set)
+  
+  # Extracting 95% confidence intervals
+  lower_bound <- forecast_result$lower[1, 2]
+  upper_bound <- forecast_result$upper[1, 2]
+  lower_bounds <- c(lower_bounds, lower_bound)
+  upper_bounds <- c(upper_bounds, upper_bound)
+  
+  # Calculating forecast error (absolute error)
+  error <- abs(forecasted_value - test_set)
+  errors <- c(errors, error)
+}
+
+# Calculating metrics
+mae <- mean(errors)
+rmse <- sqrt(mean(errors^2))
+mape <- mean(abs((actual_values - forecasted_values) / actual_values)) * 100
+medae <- median(errors)
+ss_total <- sum((actual_values - mean(actual_values))^2)
+ss_residual <- sum((actual_values - forecasted_values)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+bias <- mean(forecasted_values - actual_values)
+
+# Creating a dataframe for evaluation statistics
+evaluation_df <- data.frame(
+  Metric = c("MAE", "RMSE", "MAPE", "MedAE", "R-Squared", "Bias"),
+  Value = c(mae, rmse, mape, medae, r_squared, bias)
+)
+
+# Creating a dataframe for forecasts, intervals, and actual values
+forecast_df <- data.frame(
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Actual = actual_values,
+  Forecasted = forecasted_values,
+  Lower_95 = lower_bounds,
+  Upper_95 = upper_bounds,
+  Inside_Interval = actual_values >= lower_bounds & actual_values <= upper_bounds,
+  Error = test_values - forecast_values,  # Error: Actual - Forecast
+  Absolute_Error = abs(test_values - forecast_values),  # Absolute Error
+  Percentage_Error = (abs(test_values - forecast_values) / test_values) * 100  # Percentage Error
+)
+
+print("Evaluation Statistics:")
+print(evaluation_df)
+
+print("Forecast Details with 95% Intervals:")
+print(forecast_df)
+
+```
+
+```{r}
+
+#Creating a plot
+ggplot(forecast_df, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = Forecasted, color = "Forecast"), size = 1, linetype = "dashed") +
+  geom_ribbon(aes(ymin = Lower_95, ymax = Upper_95), fill = "lightblue", alpha = 0.5) +
+  labs(
+    title = "Actual vs Forecasted Values with 95% Prediction Intervals",
+    x = "Date",
+    y = "Number of fires"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())  
+```
+
+
+#### Discussion
+
+#-------------------------------------------------------------------
+
+# Benefits of the SARIMA Model
+
+#Captures Seasonality:
+
+The SARIMA (2,0,0)(1,1,0)[12] configuration effectively accounts for the 12-month seasonal cycle present in forest fire data, which is crucial for understanding and predicting annual fire trends.
+
+#Handles Trends and Differencing:
+
+The differencing components (D=1) help handle non-stationarity in the seasonal cycle, which is common in long-term time series like forest fires.
+
+#Good Fit Without Cross-Validation:
+
+Metrics like R^2 = 0.64 and RMSE = 2973 (no cross-validation experiment) show that SARIMA can reasonably fit the training data, capturing significant patterns and trends.
+
+#Data-Driven Approach:
+
+SARIMA models are well-suited for data with clear seasonality and autocorrelation, making them applicable to natural phenomena like forest fires.
+
+#-------------------------------------------------------------------
+
+#Limitations of SARIMA for Forest Fire Data
+
+#Struggles with Extreme Variability:
+
+Forest fires exhibit high variability due to external factors (e.g., rainfall, temperature, policy changes). SARIMA cannot incorporate these external drivers, limiting its ability to model extreme changes.
+
+# Performance Drops with Cross-Validation:
+
+Metrics like RMSE = 5417 and R^2 = −0.19 in cross-validation highlight poor generalization. This reflects:
+Smaller training subsets in time-aware cross-validation lead to less effective learning of seasonal and trend components.
+Temporal variability (e.g., long-term trends due to climate change) reduces the model's ability to generalize.
+
+# Assumes Stationarity:
+
+SARIMA assumes stationarity in seasonality and trends. If the underlying patterns shift over time, the model may become outdated or inaccurate.
+
+# No External Predictors:
+
+SARIMA is limited to past values of the target variable. It cannot consider external factors (e.g., El Niño, deforestation rates), which are critical for forest fire dynamics.
+
+# Wide Prediction Intervals:
+
+The model often produces broad 95% confidence intervals, indicating high uncertainty in forecasts, particularly for extreme values or unseen test data.
+
+
+#-------------------------------------------------------------------
+
+# Insights from Time Series Cross-Validation
+
+# Time-Aware Validation:
+
+Cross-validation for time series respects temporal order, using past data to predict future observations. This better reflects real-world forecasting scenarios.
+However, metrics like MAE = 2704 and RMSE = 5417 indicate the model struggles with unseen data, particularly in recent years where variability may be higher.
+
+#Reasons for Performance Drop:
+
+Temporal Shifts: Cross-validation highlights that patterns in the training set may not fully align with those in the test set (e.g., due to climate or policy changes).
+
+Edge Effects: SARIMA depends on lagged values, and forecasts near the train-test boundary can be less reliable.
+
+#-------------------------------------------------------------------
+
