@@ -33,7 +33,6 @@ head(dataset)
 summary(dataset)
 ```
 
-
 ```{r}
 colSums(is.na(dataset))
 ```
@@ -186,35 +185,6 @@ pacf(ts_mato_grosso, main = "Partial Autocorrelation Function (PACF)")
 ```
 
 ```{r}
-adf_test_monthly <- adf.test(ts_mato_grosso, alternative = "stationary")
-cat("ADF Test - p-value:", adf_test_monthly$p.value, "\n")
-if (adf_test_monthly$p.value < 0.05) {
-  cat("The monthly series is stationary based on the ADF test.\n")
-} else {
-  cat("The monthly series is not stationary based on the ADF test.\n")
-}
-```
-
-
-- annual data
-
-```{r}
-acf(ts_mato_grosso_annual, main = "Autocorrelation Function (ACF)")
-pacf(ts_mato_grosso_annual, main = "Partial Autocorrelation Function (PACF)")
-
-```
-```{r}
-adf_test_annual <- adf.test(ts_mato_grosso_annual, alternative = "stationary")
-cat("ADF Test (Anual) - p-value:", adf_test_annual$p.value, "\n")
-if (adf_test_annual$p.value < 0.05) {
-  cat("The annual series is stationary based on the ADF test.\n")
-} else {
-  cat("The annual series is not stationary based on the ADF test.\n")
-}
-```
-
-
-```{r}
 mato_grosso_agg <- mato_grosso_data %>%
   group_by(year) %>%
   summarise(total_fires = sum(fires, na.rm = TRUE))
@@ -240,13 +210,6 @@ ggplot(mato_grosso_agg, aes(x = year, y = change)) +
   labs(title = "Annual Variation in the Number of Fires - Mato Grosso",
        x = "Year", y = "Change in the Number of Fires") +
   theme_minimal()
-```
-
-
-```{r}
-decomp_mato_grosso <- decompose(ts_mato_grosso, type = "multiplicative")
-
-plot(decomp_mato_grosso)
 ```
 
 ```{r}
@@ -277,7 +240,6 @@ ggplot(annual_mato_grosso, aes(x = year, y = residuals)) +
 ```
 ### seasonality 
 
-
 ```{r}
 ggplot(mato_grosso_data, aes(x = as.factor(month), y = fires)) +
   geom_boxplot() +
@@ -307,7 +269,6 @@ ggplot(moving_avg, aes(x = as.Date(paste(year, month, 1, sep = "-")), y = moving
 
 
 ```{r}
-# 4. Regression with Trend and Seasonality
 dummies_model <- tslm(ts_mato_grosso ~ trend + season)
 summary(dummies_model)
 
@@ -319,7 +280,7 @@ autoplot(ts_mato_grosso, series="Data") +
 plot(residuals(dummies_model), main = "Detrended Desasonalized Data - Mato Grosso", type="l", col="blue")
 ```
 ```{r}
-# 5. Fourier Series for Seasonality
+# Fourier Series for Seasonality
 fourier_model <- tslm(ts_mato_grosso ~ trend + fourier(ts_mato_grosso, K=2))
 summary(fourier_model)
 
@@ -333,25 +294,20 @@ seasonplot(residuals(fourier_model))
 ```
 ```{r}
 # Seasonal Differencing
-par(mfrow=c(2,1))
 plot(ts_mato_grosso, main="Original Series", type="l", col="blue")
 plot(diff(ts_mato_grosso, 12), main="Seasonally Differenced Series", type="l", col="red")
 monthplot(diff(ts_mato_grosso, 12))
 ```
-```{r}
-library(scales)
-```
 
 ```{r}
 # Removing Both Trend and Seasonality
-par(mfrow=c(2,1))
 plot(ts_mato_grosso, main="Original Series", type="l", col="blue")
 plot(diff(diff(ts_mato_grosso), 12), main="Trend and Seasonally Differenced Series", type="l", col="red")
 acf(diff(diff(ts_mato_grosso), 12), main="ACF of Trend and Seasonally Differenced Series")
 ```
 
 ```{r}
-# 8. STL Decomposition
+# STL Decomposition
 mato_grosso_stl_per <- stl(ts_mato_grosso, s.window="periodic")
 mato_grosso_stl <- stl(ts_mato_grosso, s.window=13)
 plot(mato_grosso_stl_per)
@@ -362,11 +318,6 @@ plot(mato_grosso_stl)
 # Extracting Time Series Components
 head(mato_grosso_stl_per$time.series, 24)
 head(mato_grosso_stl$time.series, 24)
-```
-
-```{r}
-# Applying STL to Mato Grosso Data
-plot(mato_grosso_stl)
 ```
 
 ```{r}
@@ -652,8 +603,6 @@ ggplot(comparison_table, aes(x = Date)) +
 
 ```
 
-
-
 ```{r}
 # Print the comparison table
 print(comparison_table)
@@ -677,18 +626,14 @@ evaluation_df <- data.frame(
 print(evaluation_df)
 ```
 
-
 Forecasting the last 23 months
 CROSS-VALIDATION 23 months with 1-step ahead
 
-
 ```{r}
-#Applying log for original data
 shift_value <- 1 - min(ts_mato_grosso)
 ts_mato_grosso_shifted <- ts_mato_grosso + shift_value
 log_ts <- log(ts_mato_grosso_shifted)
 
-# Setting the size of the training and test set
 train_size <- length(log_ts) - length(test_mato_grosso)  
 
 # Storing the forecast errors, predictions, and intervals
@@ -699,32 +644,26 @@ lower_bounds <- c()
 upper_bounds <- c()
 
 for (i in 1:length(test_mato_grosso)) {
-  # Defining training and test sets
   train_set <- ts_mato_grosso_shifted[1:(train_size + i - 1)]
   test_set <- ts_mato_grosso_shifted[(train_size + i):(train_size + i)]
   
-  # Fitting the SARIMA model on the training set
   fit <- Arima(train_set, order = c(2, 0, 0), seasonal = c(1, 1, 0), 
                     include.constant = FALSE)
   
-  # Forecasting the next value(s)
   forecast_result <- forecast(fit, h = 1)
   forecasted_value <- forecast_result$mean
   forecasted_values <- c(forecasted_values, forecasted_value)
   actual_values <- c(actual_values, test_set)
   
-  # Extracting 95% confidence intervals
   lower_bound <- forecast_result$lower[1, 2]
   upper_bound <- forecast_result$upper[1, 2]
   lower_bounds <- c(lower_bounds, lower_bound)
   upper_bounds <- c(upper_bounds, upper_bound)
   
-  # Calculating forecast error (absolute error)
   error <- abs(forecasted_value - test_set)
   errors <- c(errors, error)
 }
 
-# Calculating metrics
 mae <- mean(errors)
 rmse <- sqrt(mean(errors^2))
 mape <- mean(abs((actual_values - forecasted_values) / actual_values)) * 100
@@ -734,15 +673,13 @@ ss_residual <- sum((actual_values - forecasted_values)^2)
 r_squared <- 1 - (ss_residual / ss_total)
 bias <- mean(forecasted_values - actual_values)
 
-# Creating a dataframe for evaluation statistics
 evaluation_df <- data.frame(
   Metric = c("MAE", "RMSE", "MAPE", "MedAE", "R-Squared", "Bias"),
   Value = c(mae, rmse, mape, medae, r_squared, bias)
 )
 
-# Creating a dataframe for forecasts, intervals, and actual values
 forecast_df <- data.frame(
-  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  
   Actual = actual_values,
   Forecasted = forecasted_values,
   Lower_95 = lower_bounds,
@@ -750,7 +687,7 @@ forecast_df <- data.frame(
   Inside_Interval = actual_values >= lower_bounds & actual_values <= upper_bounds,
   Error = test_values - forecast_values,  # Error: Actual - Forecast
   Absolute_Error = abs(test_values - forecast_values),  # Absolute Error
-  Percentage_Error = (abs(test_values - forecast_values) / test_values) * 100  # Percentage Error
+  Percentage_Error = (abs(test_values - forecast_values) / test_values) * 100  
 )
 
 print("Evaluation Statistics:")
