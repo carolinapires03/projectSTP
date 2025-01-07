@@ -17,6 +17,8 @@ library(forecast)
 library(tseries)
 library(ggcorrplot)
 library(scales)
+library(astsa)
+library(seasonal)
 ```
 
 # Exploratory Data Analysis
@@ -130,7 +132,7 @@ fires_ts <- ts(annual_data$total_fires, start = min(annual_data$year), frequency
 plot(fires_ts, main = "Time Series of Forest Fires in Brazil",
      xlab = "Year", ylab = "Number of fires", col = "blue", lwd = 2)
 ```
-## State chosen: Mato Grosso
+## State chosen: Mato Grosso do Sul
 
 ```{r}
 mato_grosso_data <- dataset %>%
@@ -382,22 +384,23 @@ plot(
   lwd = 2
 )
 ```
-ADF test
+ADF and KPSS tests
 ```{r}
-adf_test_train <- adf.test(ly, alternative = "stationary")
+deseasonalized_ly <- final(seas(ly)) 
+adf_test_train <- adf.test(deseasonalized_ly, alternative = "stationary")
 cat("ADF Test - p-value:", adf_test_train$p.value, "\n")
 if (adf_test_train$p.value < 0.05) {
-  cat("The monthly series is stationary based on the ADF test.\n")
+  cat("The series is stationary based on the ADF test.\n")
 } else {
-  cat("The monthly series is not stationary based on the ADF test.\n")
+  cat("The series is not stationary based on the ADF test.\n")
 }
 
-kpss_test_train <- kpss.test(ly, null = "Level")
+kpss_test_train <- kpss.test(deseasonalized_ly, null = "Level")
 cat("KPSS Test - p-value:", kpss_test_train$p.value, "\n")
 if (kpss_test_train$p.value < 0.05) {
-  cat("The monthly series is NOT stationary based on the KPSS test.\n")
+  cat("The series is NOT stationary based on the KPSS test.\n")
 } else {
-  cat("The monthly series is stationary based on the KPSS test.\n")
+  cat("The series is stationary based on the KPSS test.\n")
 }
 ```
 The tests indicate stationarity. Use ndiffs and nsdiffs:
@@ -406,7 +409,7 @@ nsdiffs(ly)
 ndiffs(ly)
 ```
 
-Series is not stationary, needs differiencing. d = 0, D = 1.
+Results indicare series is not stationary, needs differiencing. d = 0, D = 1.
 ```{r}
 dly1 = diff(ly,1)
 dly12 = diff(ly,12)
@@ -441,7 +444,7 @@ SARIMA(2,0,0)x(1,1,0)12
 SARIMA(0,1,1)x(1,1,1)12
 
 ```{r}
-library(astsa)
+
 m1=sarima(ly,1,0,0,1,1,0,12)
 ```
 The residuals from model 1 show autocorrelation
@@ -497,9 +500,6 @@ m21
 m24
 ```
 The AIC, AICc and BIC of m24 are lower than m21, which would make it the best model. However, we still need to compare the models based on the quality of their forecasts.
-```{r}
-library(forecast)
-```
 
 ```{r}
 m21_arima <- Arima(ly, order = c(2, 0, 0), seasonal=list(order=c(1,1,0), period=12), include.constant = FALSE)
@@ -565,7 +565,7 @@ library(ggplot2)
 
 #Create a comparison table
 comparison_table <- data.frame(
-  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),
   Actual = test_values,
   Forecasted = forecast_values,
   Lower_95 = lower_bound,  # Lower bound of the 95% interval
@@ -719,7 +719,7 @@ evaluation_df <- data.frame(
 
 # Creating a dataframe for forecasts, intervals, and actual values
 forecast_df <- data.frame(
-  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)), 
   Actual = actual_values,
   Forecasted = forecasted_values,
   Lower_95 = lower_bounds,
@@ -854,7 +854,7 @@ evaluation_df <- data.frame(
 
 # Creating a dataframe for forecasts, intervals, and actual values
 forecast_df <- data.frame(
-  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)),  # Adjust if needed
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(test_values)), 
   Actual = actual_values,
   Forecasted = forecasted_values,
   Lower_95 = lower_bounds,
