@@ -911,3 +911,142 @@ ggplot(forecast_df, aes(x = Date)) +
   scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
   theme_minimal() +
   theme(legend.title = element_blank()) 
+
+#Experiments on Cross-validation: changing the test-size
+
+Tried from 2 to 5, unfortunately it didn't improve the performance, so it was not included into final report. 
+The shift of the pick in the forecast may be happening just because of the training data (there the pick was either in August or September and the model just predicts the wrong month because of historical data)
+```{r}
+
+shift_value <- 1 - min(ts_mato_grosso)
+ts_mato_grosso_shifted <- ts_mato_grosso + shift_value
+log_ts <- log(ts_mato_grosso_shifted)
+
+
+train_size <- length(log_ts) - length(test_mato_grosso)  
+
+# Forecast horizon (h = k)
+k <- 2
+
+for (k in 2:5){
+errors <- c()
+forecasted_values <- c()
+actual_values <- c()
+lower_bounds <- c()
+upper_bounds <- c()
+
+for (i in 1:(length(test_mato_grosso) - (k - 1))) {  # Adjust loop for h = k
+  # Defining training and test sets
+  train_set <- log_ts[1:(train_size + i - 1)]
+  test_set <- log_ts[(train_size + i):(train_size + i + (k - 1))]  # k-step test set
+  
+  # Fitting the SARIMA model on the training set
+  fit <- Arima(train_set, order = c(2, 0, 0), seasonal = c(1, 1, 0), 
+                    include.constant = FALSE)
+  
+  # Forecasting the next k values
+  forecast_result <- forecast(fit, h = k)
+  forecasted_value <- forecast_result$mean[k]  # Extract the k-th step forecast
+  forecasted_values <- c(forecasted_values, forecasted_value)
+  actual_values <- c(actual_values, test_set[k])  # Add the k-th test value
+  
+  # Extracting 95% confidence intervals for the k-th step
+  lower_bound <- exp(forecast_result$lower[k, 2]) - shift_value
+  upper_bound <- exp(forecast_result$upper[k, 2]) - shift_value
+  lower_bounds <- c(lower_bounds, lower_bound)
+  upper_bounds <- c(upper_bounds, upper_bound)
+  
+  # Calculating forecast error (absolute error)
+  #errors <- c(errors, abs(forecasted_value - test_set[k]))
+}
+
+
+actual_values <- exp(actual_values) - shift_value
+forecasted_values <- exp(forecasted_values) - shift_value
+errors <- abs(forecasted_values - actual_values)
+
+# Print results
+
+mae <- mean(errors)
+rmse <- sqrt(mean(errors^2))
+mape <- mean(abs((actual_values - forecasted_values) / actual_values)) * 100
+medae <- median(errors)
+ss_total <- sum((actual_values - mean(actual_values))^2)
+ss_residual <- sum((actual_values - forecasted_values)^2)
+r_squared <- 1 - (ss_residual / ss_total)
+bias <- mean(forecasted_values - actual_values)
+
+
+naive_forecast <- c(rep(NA, k), head(actual_values, -(k)))  # Shifted by k steps
+mae_naive <- mean(abs(actual_values - naive_forecast), na.rm = TRUE)  # MAE for naive
+mase <- mae / mae_naive
+
+
+evaluation_df <- data.frame(
+  Metric = c("MAE", "RMSE", "MAPE", "MedAE", "R-Squared", "Bias", "MASE"),
+  Value = c(mae, rmse, mape, medae, r_squared, bias, mase)
+)
+
+
+forecast_df <- data.frame(
+  Date = seq(as.Date("2016-01-01"), by = "month", length.out = length(actual_values)),  # Adjust if needed
+  Actual = actual_values,
+  Forecasted = forecasted_values,
+  Lower_95 = lower_bounds,
+  Upper_95 = upper_bounds,
+  Inside_Interval = actual_values >= lower_bounds & actual_values <= upper_bounds,
+  Error = actual_values - forecasted_values,  # Error: Actual - Forecast
+  Absolute_Error = abs(actual_values - forecasted_values),  # Absolute Error
+  Percentage_Error = (abs(actual_values - forecasted_values) / actual_values) * 100  # Percentage Error
+)
+
+
+print("Evaluation Statistics:")
+print(evaluation_df)
+
+
+print("Forecast Details with 95% Intervals:")
+print(forecast_df)
+
+
+ggplot(forecast_df, aes(x = Date)) +
+  geom_line(aes(y = log(Actual + shift_value), color = "Actual"), size = 1) +
+  geom_line(aes(y = log(Forecasted + shift_value), color = "Forecast"), size = 1, linetype = "dashed") +
+  geom_ribbon(aes(ymin = log(Lower_95 + shift_value), ymax = log(Upper_95 + shift_value)), fill = "lightblue", alpha = 0.5) +
+  labs(
+    title = "LOG SCALE: Actual vs Forecasted Values with 95% Prediction Intervals",
+    x = "Date",
+    y = "LOG(Number of fires)"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+ggplot(forecast_df, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = Forecasted, color = "Forecast"), size = 1, linetype = "dashed") +
+  geom_ribbon(aes(ymin = Lower_95, ymax = Upper_95), fill = "lightblue", alpha = 0.5) +
+  labs(
+    title = "Actual vs Forecasted Values with 95% Prediction Intervals",
+    x = "Date",
+    y = "Number of fires"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())
+
+
+ggplot(forecast_df, aes(x = Date)) +
+  geom_line(aes(y = Actual, color = "Actual"), size = 1) +
+  geom_line(aes(y = Forecasted, color = "Forecast"), size = 1, linetype = "dashed") +
+  labs(
+    title = "Actual vs Forecasted Values",
+    x = "Date",
+    y = "Number of fires"
+  ) +
+  scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
+  theme_minimal() +
+  theme(legend.title = element_blank())}
+
+```
