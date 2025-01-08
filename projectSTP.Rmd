@@ -917,7 +917,6 @@ ggplot(forecast_df, aes(x = Date)) +
 Tried from 2 to 5, unfortunately it didn't improve the performance, so it was not included into final report. 
 The shift of the pick in the forecast may be happening just because of the training data (there the pick was either in August or September and the model just predicts the wrong month because of historical data)
 ```{r}
-
 shift_value <- 1 - min(ts_mato_grosso)
 ts_mato_grosso_shifted <- ts_mato_grosso + shift_value
 log_ts <- log(ts_mato_grosso_shifted)
@@ -1048,5 +1047,4 @@ ggplot(forecast_df, aes(x = Date)) +
   scale_color_manual(values = c("Actual" = "blue", "Forecast" = "red")) +
   theme_minimal() +
   theme(legend.title = element_blank())}
-
 ```
